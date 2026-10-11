@@ -1,4 +1,5 @@
 // DSA.java
+import java.awt.Color;
 
 // Represents a single X,Y coordinate on the screen
 class PointNode {
@@ -33,12 +34,14 @@ class StrokeNode {
     String strokeId;
     PointsList points;
     StrokeNode prev, next;
+    Color color; // Remembers the color of this specific stroke
 
-    public StrokeNode(String strokeId) {
+    public StrokeNode(String strokeId, Color color) {
         this.strokeId = strokeId;
         this.points = new PointsList();
         this.prev = null;
         this.next = null;
+        this.color = color; // Assign the color when created
     }
 }
 

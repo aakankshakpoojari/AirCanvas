@@ -7,29 +7,38 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class AirCanvasServer extends JPanel {
-    // Instantiate all your custom data structures from DSA.java
     private CanvasStrokes strokes = new CanvasStrokes();
     private UndoStack undoStack = new UndoStack();
     private RedoStack redoStack = new RedoStack();
     private EventQueue eventQueue = new EventQueue();
     private GestureBuffer gestureBuffer = new GestureBuffer();
 
-    // Variables to track drawing state
     private int strokeCounter = 1;
     private StrokeNode currentStroke = null;
     private String previousGesture = "NONE";
     private int cursorX = 0, cursorY = 0;
+
+    // NEW: Variable to track current color
+    private Color currentColor = Color.BLACK;
 
     public AirCanvasServer() {
         setPreferredSize(new Dimension(1000, 1000));
         setBackground(Color.WHITE);
     }
 
-    // This method pulls from your custom EventQueue and processes the gesture
+    // NEW: Checks if the cursor hovers over the color palette
+    private void checkColorSelection(int x, int y) {
+        if (y >= 20 && y <= 70) {
+            if (x >= 710 && x <= 760) currentColor = Color.BLACK;
+            else if (x >= 770 && x <= 820) currentColor = Color.RED;
+            else if (x >= 830 && x <= 880) currentColor = Color.GREEN;
+            else if (x >= 890 && x <= 940) currentColor = Color.BLUE;
+        }
+    }
+
     public void processEvent() {
         String eventStr = eventQueue.dequeue();
         if (eventStr == null) return;
-
         String[] parts = eventStr.split(",");
         if (parts.length < 3) return;
 
@@ -40,27 +49,26 @@ public class AirCanvasServer extends JPanel {
         cursorX = x;
         cursorY = y;
 
-        // Smooth out the webcam input using your custom circular buffer
         gestureBuffer.addGesture(rawGesture);
         String confirmedGesture = gestureBuffer.getConfirmedGesture();
 
-        // Rule: Any gesture other than DRAW ends the current stroke[cite: 2]
+        // NEW: Check if we are selecting a color
+        checkColorSelection(x, y);
+
         if (!confirmedGesture.equals("DRAW") && currentStroke != null) {
             undoStack.push(currentStroke);
-            redoStack.clear(); // Rule: A new stroke clears the redo stack[cite: 2]
+            redoStack.clear();
             currentStroke = null;
         }
 
-        // Process the confirmed gesture
         if (confirmedGesture.equals("DRAW")) {
             if (currentStroke == null) {
-                // Rule: Each stroke receives an ID in order, such as S1, S2[cite: 2]
-                currentStroke = new StrokeNode("S" + strokeCounter++);
+                // NEW: Pass the current color into the new StrokeNode
+                currentStroke = new StrokeNode("S" + strokeCounter++, currentColor);
                 strokes.addStroke(currentStroke);
             }
             currentStroke.points.addPoint(x, y);
         }
-        // Rule: UNDO, REDO, CLEAR act only once for each gesture[cite: 2]
         else if (confirmedGesture.equals("UNDO") && !previousGesture.equals("UNDO")) {
             StrokeNode lastStroke = undoStack.pop();
             if (lastStroke != null) {
@@ -82,21 +90,40 @@ public class AirCanvasServer extends JPanel {
         }
 
         previousGesture = confirmedGesture;
-        repaint(); // Force the screen to redraw with the new data
+        repaint();
     }
 
-    // This method traverses your custom linked lists to draw on the screen
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2d = (Graphics2D) g;
 
-        // Draw all strokes in the doubly linked list
-        g2d.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2d.setColor(Color.BLUE); // Drawing color
+        // --- NEW: Draw Color Palette (Top Right) ---
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(710, 20, 50, 50);
+        g2d.setColor(Color.RED);
+        g2d.fillRect(770, 20, 50, 50);
+        g2d.setColor(Color.GREEN);
+        g2d.fillRect(830, 20, 50, 50);
+        g2d.setColor(Color.BLUE);
+        g2d.fillRect(890, 20, 50, 50);
 
+        // Highlight the currently selected color with a border
+        g2d.setColor(Color.GRAY);
+        g2d.setStroke(new BasicStroke(3));
+        if (currentColor == Color.BLACK) g2d.drawRect(708, 18, 54, 54);
+        else if (currentColor == Color.RED) g2d.drawRect(768, 18, 54, 54);
+        else if (currentColor == Color.GREEN) g2d.drawRect(828, 18, 54, 54);
+        else if (currentColor == Color.BLUE) g2d.drawRect(888, 18, 54, 54);
+        // ---------------------------------------------
+
+        // Draw all strokes
+        g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         StrokeNode currStrokeNode = strokes.head;
         while (currStrokeNode != null) {
+
+            g2d.setColor(currStrokeNode.color); // NEW: Use the stroke's saved color
+
             PointNode currPoint = currStrokeNode.points.head;
             if (currPoint != null) {
                 int prevX = currPoint.x;
@@ -112,13 +139,12 @@ public class AirCanvasServer extends JPanel {
             currStrokeNode = currStrokeNode.next;
         }
 
-        // Draw a red dot for the live cursor tracking the index finger
-        g2d.setColor(Color.RED);
+        // Draw cursor as a dot matching the current color
+        g2d.setColor(currentColor);
         g2d.fillOval(cursorX - 5, cursorY - 5, 10, 10);
     }
 
     public static void main(String[] args) {
-        // 1. Setup the GUI Window
         JFrame frame = new JFrame("Air Canvas - Java Server");
         AirCanvasServer canvas = new AirCanvasServer();
         frame.add(canvas);
@@ -126,22 +152,14 @@ public class AirCanvasServer extends JPanel {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
 
-        // 2. Start the Server socket on a background thread so the GUI doesn't freeze
         new Thread(() -> {
             try (ServerSocket serverSocket = new ServerSocket(5000)) {
                 System.out.println("Java Server started on localhost port 5000.");
-                System.out.println("Waiting for Python client to connect...");
-
                 Socket socket = serverSocket.accept();
-                System.out.println("Python client connected successfully!");
-
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String line;
-
-                // Read messages from Python line-by-line[cite: 1]
                 while ((line = in.readLine()) != null) {
                     canvas.eventQueue.enqueue(line);
-                    // Safely update the GUI with the new event
                     SwingUtilities.invokeLater(() -> canvas.processEvent());
                 }
             } catch (IOException e) {

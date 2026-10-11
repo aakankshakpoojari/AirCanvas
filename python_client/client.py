@@ -42,18 +42,23 @@ def detect_gesture(landmarks):
     # Check thumb (using y-coordinates for a simple "Thumbs Up" check)
     thumb_up = landmarks.landmark[4].y < landmarks.landmark[3].y and landmarks.landmark[4].y < landmarks.landmark[5].y
 
-    # Match the gestures to the rules in the PDF[cite: 1]
-    if fingers_up == [1, 0, 0, 0] and not thumb_up:
-        return "DRAW"  # Index finger up, others down
+    # --- UPDATED GESTURE RULES ---
+
+    # We removed 'and not thumb_up' so DRAW triggers easily[cite: 1]
+    if fingers_up == [1, 0, 0, 0]:
+        return "DRAW"
+
     elif fingers_up == [1, 1, 0, 0]:
-        return "MOVE"  # Index and middle fingers up
-    elif fingers_up == [1, 1, 1, 1] and not thumb_up:
-        return "CLEAR" # Open palm with four fingers up
+        return "MOVE"
+
+    elif fingers_up == [1, 1, 1, 1]: # 4 fingers up
+        return "CLEAR"
+
     elif fingers_up == [0, 0, 0, 0]:
         if thumb_up:
-            return "REDO"  # Thumbs up, others down
+            return "REDO"
         else:
-            return "UNDO"  # Fist (all fingers down)
+            return "UNDO"
 
     return "NONE"
 prev_x, prev_y = 0, 0
@@ -84,9 +89,9 @@ while cap.isOpened():
                 if prev_x == 0 and prev_y == 0:
                     x, y = raw_x, raw_y
                 else:
-                    # 0.6 is the smoothing factor. Lower = smoother but slightly lags behind your finger.
-                    x = int(prev_x + 0.6 * (raw_x - prev_x))
-                    y = int(prev_y + 0.6 * (raw_y - prev_y))
+
+                    x = int(prev_x + 0.5 * (raw_x - prev_x))
+                    y = int(prev_y + 0.5 * (raw_y - prev_y))
 
                 prev_x, prev_y = x, y
                 # -----------------------------------------------
